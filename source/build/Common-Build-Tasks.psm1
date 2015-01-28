@@ -12,6 +12,13 @@
     Delete-Bin-And-Obj-Folders $configuration
     Write-Host
 
+    If (Test-Path .\artifacts)
+    {
+        Write-Host "Removing \artifacts folder..."
+        Remove-Item .\artifacts -Recurse -Force
+        Write-Host "Successfully removed \artifacts folder."
+    }
+
     Write-Host "Running msbuild clean task..."
     Write-Host
     Exec { msbuild $sln /verbosity:minimal /property:Configuration=$configuration /target:Clean }
