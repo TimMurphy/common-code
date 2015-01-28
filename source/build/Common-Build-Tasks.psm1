@@ -49,6 +49,68 @@ Function Compile-Solution(
     Write-Host
 }
 
+Function Create-Bin-Artifacts(
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $bin,
+
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $artifacts)
+{
+    Create-Folder -folder $artifacts
+
+    Write-Host
+    Write-Host "Copying artifacts to $artifacts..."
+    Get-ChildItem -Path $bin |
+        Copy-Item -Destination $artifacts
+    Write-Host "Successfully copied artifacts to $artifacts."
+
+    Write-Host
+}
+
+Function Create-Folder(
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $folder)
+{
+    Write-Host "Creating $folder folder..."
+    New-Item -Path $folder -ItemType Directory | Out-Null
+    Write-Host "Successfully created $folder folder."    
+}
+
+Function Create-NuGet-Package(    
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $nuGet,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $nuSpec,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $nuPkg,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $outputDirectory,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $version)
+{    
+    Create-Folder -folder $outputDirectory
+
+    Write-Host
+    Write-Host "Creating $nuPkg..."
+    Exec { Invoke-Expression "&""$nuGet"" pack ""$nuSpec"" -OutputDirectory ""$outputDirectory"" -Version $version" }
+    Write-Host "Successfully created $nupkg."
+}
+
 Function Create-PackagesFolder(
     [string]
     [parameter(Mandatory=$true)]
@@ -67,12 +129,57 @@ Function Create-PackagesFolder(
     }
 }
 
+# Creates specflow.exe.config so specflow.exe will run with .net 4.0.
+Function Create-SpecFlow-Config(
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $specFlowToolsFolder)
+{
+    $specFlowConfig = "$specFlowToolsFolder\specflow.exe.config"
+
+    Write-Host "Creating $specFlowConfig..."
+
+    Remove-Item $specFlowConfig -ErrorAction SilentlyContinue
+    Add-Content $specFlowConfig "<?xml version=""1.0"" encoding=""utf-8"" ?>"
+    Add-Content $specFlowConfig "<configuration>"
+    Add-Content $specFlowConfig "<startup>"
+    Add-Content $specFlowConfig "<supportedRuntime version=""v4.0.30319"" />"
+    Add-Content $specFlowConfig "</startup>"
+    Add-Content $specFlowConfig "</configuration>"
+
+    Write-Host "Successfully created $specFlowConfig."
+    Write-Host
+}
+
+Function Create-SpecFlow-Tests(
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $specFlow,
+
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $project)
+{
+    Write-Host "Creating SpecFlow test files for $project..."
+    Write-Host
+
+    Exec { Invoke-Expression "&""$specFlow"" generateall ""$project"" /force" }
+
+    Write-Host
+    Write-Host "Successfully created SpecFlow test files for $project."
+    Write-Host
+}
+
 Function Delete-Bin-And-Obj-Folders(
     [string]
     [parameter(Mandatory=$true)]
     [ValidateNotNullOrEmpty()]
     $configuration)
 {
+    $deletedFolders = $false
     Write-Host "Deleting all bin\$configuration & obj\$configuration folders in $(Get-Location)..."
     Write-Host
 
@@ -84,10 +191,18 @@ Function Delete-Bin-And-Obj-Folders(
 
             Write-Host "Deleting $fullName..."
             Remove-Item $fullName -Force -Recurse | Out-Null
+            $deletedFolders = $true
         }
 
-    Write-Host
-    Write-Host "Successfully deleted all bin & obj folders."
+    If ($deletedFolders)
+    {
+        Write-Host
+        Write-Host "Successfully deleted all bin & obj folders."
+    }
+    Else
+    {
+        Write-Host "No bin or obj folders to delete."
+    }
 }
 
 Function Get-NuGet-Version()
@@ -169,6 +284,22 @@ Function Install-NuGet-Package(
     If ($LASTEXITCODE -ne 0)
     {
         throw "Installing '$packageId' failed with ERRORLEVEL '$LASTEXITCODE'"
+    }
+}
+
+Function MyGet-Cleanup(
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $packages)
+{
+    $buildRunner = $env:BuildRunner
+
+    if ($buildRunner -eq "MyGet")
+    {
+        Write-Host
+        Write-Host "Removing packages folder so MyGet doesn't publish any of them..."
+        Remove-Item $packages -Recurse -Force
+        Write-Host "Successfully removed packages folder."
     }
 }
 
