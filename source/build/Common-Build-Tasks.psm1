@@ -49,17 +49,21 @@ Function Compile-Solution(
     Write-Host
 }
 
-Function Create-PackagesFolder()
+Function Create-PackagesFolder(
+    [string]
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $packages)
 {
-    If (Test-Path .\packages)
+    If (Test-Path $packages)
     {
-        Write-Host "\packages folder already exists."
+        Write-Host "packages folder already exists."
     }
     Else
     {
-        Write-Host "Creating \packages folder..."
-        New-Item -ItemType Directory -Path .\packages -Force | Out-Null
-        Write-Host "Successfully created \packages folder."
+        Write-Host "Creating packages folder..."
+        New-Item -ItemType Directory -Path $packages -Force | Out-Null
+        Write-Host "Successfully created packages folder."
     }
 }
 
@@ -106,16 +110,20 @@ Function Get-NuGet-Version()
     Return $version
 }
 
-Function Install-NuGet()
+Function Install-NuGet(
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$nuGet)
 {
-    If (Test-Path .\packages\NuGet.exe)
+
+    If (Test-Path $nuGet)
     {
-    Write-Host "NuGet.exe is already installed."
+        Write-Host "NuGet.exe is already installed."
         return
     }
 
     Write-Host "Installating NuGet.exe..."
-    Invoke-WebRequest http://www.nuget.org/NuGet.exe -OutFile .\packages\NuGet.exe
+    Invoke-WebRequest http://www.nuget.org/NuGet.exe -OutFile $nuGet
     Write-Host "Successfully installed NuGet."
 }
 
