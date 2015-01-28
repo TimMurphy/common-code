@@ -1,27 +1,29 @@
 ﻿Function Clean-Solution(
-    [string]
     [parameter(Mandatory=$true)]
     [ValidateNotNullOrEmpty()]
-    $sln,
+    [string] $sln,
+        
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $configuration,
 
-    [string]
     [parameter(Mandatory=$true)]
     [ValidateNotNullOrEmpty()]
-    $configuration)
+    [string] $artifacts)
 {
     Delete-Bin-And-Obj-Folders $configuration
     Write-Host
 
-    If (Test-Path .\artifacts)
+    If (Test-Path $artifacts)
     {
-        Write-Host "Removing \artifacts folder..."
-        Remove-Item .\artifacts -Recurse -Force
-        Write-Host "Successfully removed \artifacts folder."
+        Write-Host "Removing artifacts folder..."
+        Remove-Item $artifacts -Recurse -Force
+        Write-Host "Successfully removed artifacts folder."
     }
 
     Write-Host "Running msbuild clean task..."
     Write-Host
-    Exec { msbuild $sln /verbosity:minimal /property:Configuration=$configuration /target:Clean }
+    Exec { msbuild ""$sln"" /verbosity:minimal /property:Configuration=$configuration /target:Clean }
 
     Write-Host "Successfully ran msbuild clean task."
     Write-Host
@@ -84,6 +86,26 @@ Function Delete-Bin-And-Obj-Folders(
     Write-Host "Successfully deleted all bin & obj folders."
 }
 
+Function Get-NuGet-Version()
+{
+    # MyGet sets PackageVersion environment variable.
+    $version = $env:PackageVersion
+
+    If ([string]::IsNullOrWhitespace($version))
+    {
+        $version = "0.0.0"
+        Write-Host "NuGet package version is $version because environment variable PackageVersion is empty."
+    }
+    Else
+    {
+        Write-Host "NuGet package version is $version because environment variable PackageVersion is not empty."
+    }
+
+    Write-Host
+
+    Return $version
+}
+
 Function Install-NuGet()
 {
     If (Test-Path .\packages\NuGet.exe)
@@ -98,44 +120,72 @@ Function Install-NuGet()
 }
 
 Function Install-NuGet-Package(
-    [string]
     [parameter(Mandatory=$true)]
     [ValidateNotNullOrEmpty()]
-    $packageId,
+    [string] $solutionFolder,
     
-    [boolean]
-    $excludeVersion = $false) 
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $packageId,
+    
+    [boolean] $excludeVersion = $false,
+    [string] $version)
 {
     Write-Host "Checking if '$packageId' is installed..."
 
-    $options = "Install $packageId -OutputDirectory .\packages -ConfigFile .\NuGet.config"
+    $packages = Resolve-Path "$solutionFolder\packages"
+    $nuGet = Resolve-Path "$packages\NuGet.exe"
+    $nuGetConfig = Resolve-Path $solutionFolder\NuGet.config
+
+    $options = "Install $packageId -OutputDirectory ""$packages"" -ConfigFile ""$nuGetConfig"""
 
     If ($excludeVersion)
     {
         $options += " -ExcludeVersion"
 
-        If (Test-Path .\packages\$packageId)
+        If (Test-Path $packages\$packageId)
         {
             Write-Host "Package '$packageId' is already installed."
             return
         }
     }
 
-    # Beats me with Invoke-Expression is required. '& .\packages\NuGet.exe $options' does not work.
-    Invoke-Expression "&.\packages\NuGet.exe $options"
+    If (($version -ne $null) -and (Test-Path $packages\$packageId.$version))
+    {
+        Write-Host "Package '$packageId' is already installed."
+        return
+    }
+
+    Invoke-Expression "&""$nuGet"" $options"
+
+    If ($LASTEXITCODE -ne 0)
+    {
+        throw "Installing '$packageId' failed with ERRORLEVEL '$LASTEXITCODE'"
+    }
 }
 
 Function Restore-NuGet-Packages(
-    [string]
     [parameter(Mandatory=$true)]
     [ValidateNotNullOrEmpty()]
-    $sln)
+    [string] $nuGet,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $nuGetConfig,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $sln,
+
+    [parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $packages)
 {
     Write-Host "Restoring any missing NuGet packages..."
     Write-Host
 
-    Exec { & .\packages\NuGet.exe install xunit.runners -OutputDirectory .\packages -Verbosity normal -ConfigFile .\NuGet.config -ExcludeVersion -NonInteractive }
-    Exec { & .\packages\NuGet.exe restore $sln -PackagesDirectory .\packages -Verbosity normal -ConfigFile .\NuGet.config -NonInteractive }
+    Exec { Invoke-Expression "&""$nuGet"" install xunit.runners -OutputDirectory ""$packages"" -Verbosity normal -ConfigFile ""$nuGetConfig"" -ExcludeVersion -NonInteractive" }
+    Exec { Invoke-Expression "&""$nuGet"" restore ""$sln"" -PackagesDirectory ""$packages"" -Verbosity normal -ConfigFile ""$nuGetConfig"" -NonInteractive" }
 
     Write-Host
     Write-Host "Successfully restored missing NuGet packages."
@@ -160,7 +210,7 @@ Function Run-xUnit-Tests(
 {
     Write-Host
 
-    Get-ChildItem -Path .\tests -Directory |
+    Get-ChildItem -Path $testsFolder -Directory |
         ForEach-Object {
 
             $fullFolder = $_.FullName
@@ -171,7 +221,7 @@ Function Run-xUnit-Tests(
             Write-Host "----------------------------------------------------------------------"
             Write-Host
 
-            Exec { .$xUnit $testAssembly }
+            Exec { Invoke-Expression "&""$xUnit"" ""$testAssembly""" }
             
             Write-Host
             Write-Host "Successfully ran all tests in $folderName."
